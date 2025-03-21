@@ -1,37 +1,135 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# JobSurf AI
+
+A Next.js application that extracts job information from various job platforms using AI.
+
+## Features
+
+- Extracts detailed job information from various job platforms (LinkedIn, Glassdoor, Indeed, Welcome to the Jungle, etc.)
+- Supports both English and French job listings
+- Provides structured JSON output for easy integration with other systems
+- Responsive UI with both "pretty" and raw JSON views
+- Built with Next.js 15.2.3, TypeScript, and Tailwind CSS
+
+## Tech Stack
+
+- Next.js 15.2.3
+- TypeScript
+- Tailwind CSS
+- OpenAI API (GPT-4o)
+- Axios for API requests
+- Cheerio for HTML parsing
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18.x or higher
+- npm or yarn
+- OpenAI API key
+
+### Installation
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/yourusername/job_surf_ai.git
+cd job_surf_ai
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+# or
+yarn install
+```
+
+3. Set up environment variables:
+
+Copy the template file and add your OpenAI API key:
+
+```bash
+cp .env.local.template .env.local
+```
+
+Then edit `.env.local` to add your actual OpenAI API key.
+
+### Development
+
+Run the development server:
 
 ```bash
 npm run dev
 # or
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Building for Production
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Build the application for production:
 
-## Learn More
+```bash
+npm run build
+# or
+yarn build
+```
 
-To learn more about Next.js, take a look at the following resources:
+Start the production server:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run start
+# or
+yarn start
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Usage
 
-## Deploy on Vercel
+1. Enter a job listing URL from LinkedIn, Welcome to the Jungle, Glassdoor, or Indeed
+2. Click "Extract Info" to analyze the job listing
+3. View the extracted information in either the pretty view or JSON format
+4. Copy the JSON data for integration with other systems
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## API Endpoints
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# job_surf_ai
+### POST /api/extract-job
+
+Extracts job information from a URL.
+
+**Request:**
+
+```json
+{
+  "url": "https://www.linkedin.com/jobs/view/example-job"
+}
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "title": "Software Engineer",
+    "company": "Example Company",
+    "location": "Paris, France",
+    "description": "...",
+    "requirements": ["..."],
+    "responsibilities": ["..."],
+    "benefits": ["..."],
+    "salary": "€50,000 - €70,000",
+    "employmentType": "Full-time",
+    "experienceLevel": "Mid-level",
+    "contactInfo": "jobs@example.com",
+    "postedDate": "2025-03-15",
+    "deadline": "2025-04-15",
+    "platform": "LinkedIn",
+    "language": "en",
+    "url": "https://www.linkedin.com/jobs/view/example-job"
+  }
+}
+```
+
+## License
+
+This project is licensed under the MIT License.
