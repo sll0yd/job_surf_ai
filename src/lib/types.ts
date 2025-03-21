@@ -1,7 +1,7 @@
 export interface JobData {
   title: string;
   company: string;
-  location: string;
+  location?: string; // Made optional
   salary?: string;
   jobType?: string;
   description: string;

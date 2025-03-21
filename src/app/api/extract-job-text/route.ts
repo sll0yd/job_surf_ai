@@ -7,6 +7,20 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Function to clean and truncate text
+function prepareTextContent(text: string): string {
+  // Remove excessive whitespace
+  let content = text.replace(/\s+/g, ' ').trim();
+  
+  // Truncate to approximately 8k tokens (about 32k characters) for GPT-3.5
+  const MAX_CHARS = 32000;
+  if (content.length > MAX_CHARS) {
+    content = content.substring(0, MAX_CHARS) + '... [content truncated due to length]';
+  }
+  
+  return content;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Parse the request body
@@ -21,18 +35,52 @@ export async function POST(request: NextRequest) {
     }
 
     // Extract job information using OpenAI
-    const jobData = await extractJobInformationFromText(text);
-    
-    return NextResponse.json<ExtractResponse>(
-      { success: true, data: jobData },
-      { status: 200 }
-    );
+    try {
+      const jobData = await extractJobInformationFromText(text);
+      
+      return NextResponse.json<ExtractResponse>(
+        { success: true, data: jobData },
+        { status: 200 }
+      );
+    } catch (error) {
+      console.error('Error in OpenAI processing:', error);
+      
+      // Return an error response with all required fields
+      return NextResponse.json<ExtractResponse>(
+        { 
+          success: false, 
+          error: error instanceof Error ? 
+            `Error processing job data: ${error.message}` : 
+            'Unknown error occurred while processing job data',
+          data: {
+            title: "Processing Error",
+            company: "Unknown",
+            description: "An error occurred while processing the job text.",
+            language: "en",
+            url: "N/A - Direct text input",
+            location: "Unknown Location"
+          }
+        },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     console.error('Error processing job extraction from text:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     
     return NextResponse.json<ExtractResponse>(
-      { success: false, error: errorMessage },
+      { 
+        success: false, 
+        error: errorMessage,
+        data: {
+          title: "Error",
+          company: "Unknown",
+          description: "An error occurred while processing the request.",
+          language: "en",
+          url: "N/A - Direct text input",
+          location: "Unknown Location"
+        }
+      },
       { status: 500 }
     );
   }
@@ -40,39 +88,78 @@ export async function POST(request: NextRequest) {
 
 // Function to extract job information from text using OpenAI
 async function extractJobInformationFromText(jobText: string) {
+  // Clean and truncate the text content
+  const processedContent = prepareTextContent(jobText);
+  
+  console.log(`Processed text content length: ${processedContent.length} characters`);
+  
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4-turbo',
+      model: 'gpt-3.5-turbo', // Using gpt-3.5-turbo for better rate limits
       messages: [
         {
           role: 'system',
           content: `You are a specialized AI that extracts job information from text content. 
           Analyze the provided job listing text and extract all relevant details.
-          Return the data in a clean, structured JSON format.
-          You can recognize job descriptions in both English and French.
-          If certain fields are not present, omit them. Do not invent information.
-          Determine the language of the listing and include it in the response.`
+          Return the data in a clean, structured JSON format with the following fields where available:
+          - title: job title
+          - company: company name
+          - location: job location
+          - description: main job description
+          - requirements: array of job requirements
+          - responsibilities: array of job responsibilities
+          - benefits: array of job benefits
+          - salary: salary information if available
+          - jobType: full-time, part-time, contract, etc.
+          - postedDate: when the job was posted
+          - applicationDeadline: application deadline if available
+          - contactInfo: contact information if available
+          - language: determine if the job posting is in English ('en') or French ('fr')
+          
+          If certain fields are not present, omit them. Do not invent information.`
         },
         {
           role: 'user',
           content: `Extract all relevant job information from this job listing text. 
           Format your response as a clean JSON object without any additional text or explanations.
-          \n\n${jobText}`
+          \n\n${processedContent}`
         }
       ],
       temperature: 0.2,
-      max_tokens: 4000,
+      max_tokens: 2048,
       response_format: { type: 'json_object' }
     });
 
     // Parse the response
     const content = response.choices[0]?.message?.content || '';
-    const jobData = JSON.parse(content);
-    
-    // Add a placeholder URL since we're processing text directly
-    jobData.url = "N/A - Direct text input";
-    
-    return jobData;
+    try {
+      const parsedData = JSON.parse(content);
+      
+      // Ensure all required fields are present
+      return {
+        title: parsedData.title || "Unknown Title",
+        company: parsedData.company || "Unknown Company",
+        description: parsedData.description || "No description available",
+        language: parsedData.language || "en",
+        url: "N/A - Direct text input",
+        location: parsedData.location || "Unknown Location",
+        ...parsedData // Include any other fields that were successfully extracted
+      };
+    } catch (jsonError) {
+      console.error('Error parsing JSON response:', jsonError);
+      console.log('Raw content:', content);
+      
+      // Return a minimal valid JSON with all required fields
+      return {
+        title: "Could not extract job title",
+        company: "Unknown company",
+        description: "Could not parse job description properly.",
+        language: "en",
+        url: "N/A - Direct text input",
+        location: "Unknown Location",
+        error: "Failed to parse the full job details."
+      };
+    }
   } catch (error) {
     console.error('Error extracting job information with OpenAI:', error);
     throw error;
