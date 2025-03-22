@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { ParserResult, extractText, extractJsonLd, stringToArray, detectLanguage } from './baseParser';
+import { ParserResult, extractText, extractJsonLd, detectLanguage } from './baseParser';
 
 export function parseIndeed(html: string, url: string): ParserResult {
   const $ = cheerio.load(html);
@@ -74,11 +74,14 @@ export function parseIndeed(html: string, url: string): ParserResult {
     
     // Find the following list or paragraph
     let container;
-    let currentNode = heading;
-    while (currentNode.next) {
-      currentNode = currentNode.next;
-      if ($(currentNode).is('ul, ol, p') && $(currentNode).text().trim()) {
-        container = currentNode;
+    let currentElem = heading;
+    
+    while ($(currentElem).next().length) {
+      const nextElem = $(currentElem).next()[0];
+      currentElem = nextElem;
+      
+      if ($(currentElem).is('ul, ol, p') && $(currentElem).text().trim()) {
+        container = currentElem;
         break;
       }
     }

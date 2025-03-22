@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { ParserResult, extractText, extractJsonLd, stringToArray, detectLanguage } from './baseParser';
+import { ParserResult, extractText, extractJsonLd, detectLanguage } from './baseParser';
 
 export function parseLinkedIn(html: string, url: string): ParserResult {
   const $ = cheerio.load(html);
@@ -8,10 +8,18 @@ export function parseLinkedIn(html: string, url: string): ParserResult {
   const jsonLd = extractJsonLd($);
   
   if (jsonLd) {
+    // Handle jobLocation properly based on its type
+    let location: string | undefined;
+    if (typeof jsonLd.jobLocation === 'string') {
+      location = jsonLd.jobLocation;
+    } else if (jsonLd.jobLocation && typeof jsonLd.jobLocation === 'object') {
+      location = jsonLd.jobLocation.address?.addressLocality;
+    }
+
     return {
       title: jsonLd.title,
       company: jsonLd.hiringOrganization?.name,
-      location: jsonLd.jobLocation?.address?.addressLocality,
+      location: location,
       description: jsonLd.description,
       datePosted: jsonLd.datePosted,
       validThrough: jsonLd.validThrough,

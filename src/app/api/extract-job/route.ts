@@ -3,6 +3,11 @@ import axios, { AxiosError } from 'axios';
 import { extractJobInformation } from '@/lib/openai';
 import { ExtractResponse } from '@/lib/types';
 import { jobCache } from '@/lib/cache';
+import { parseLinkedIn } from '@/lib/parsers/linkedin';
+import { parseIndeed } from '@/lib/parsers/indeed';
+import { parseMonster } from '@/lib/parsers/monster';
+import { parseWTTJ } from '@/lib/parsers/wttj';
+import { parseGlassdoor } from '@/lib/parsers/glassdoor';
 
 // Simple in-memory request tracking for rate limiting
 const requestTracker = {
@@ -13,26 +18,6 @@ const requestTracker = {
     requestTracker.lastRequestTime = Date.now();
   }
 };
-
-// Function to validate URL format
-function isValidURL(urlString: string): boolean {
-  try {
-    new URL(urlString);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Helper to normalize URLs for consistent caching
-function normalizeUrl(url: string): string {
-  try {
-    const parsedUrl = new URL(url);
-    return parsedUrl.toString();
-  } catch {
-    return url; // Return original if parsing fails
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,13 +68,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Normalize and validate URL
+    // Validate and normalize URL
     let url: string;
     try {
       // Parse it to ensure it's valid and get a normalized version
       const parsedUrl = new URL(rawUrl);
       url = parsedUrl.toString();
-    } catch (error) {
+    } catch {
       return NextResponse.json<ExtractResponse>(
         { 
           success: false, 
@@ -214,10 +199,10 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
-    } catch (error) {
+    } catch (fetchError) {
       // Type guard to check if it's an Axios error
-      const axiosError = error as AxiosError;
-      console.error('Full error details:', error);
+      const axiosError = fetchError as AxiosError;
+      console.error('Full error details:', fetchError);
       let errorMessage = 'Unknown error occurred';
       let statusCode = 500;
       
@@ -286,15 +271,15 @@ function getParserForSite(hostname: string) {
   const site = hostname.toLowerCase();
   
   if (site.includes('linkedin.com')) {
-    return require('@/lib/parsers/linkedin').parseLinkedIn;
+    return parseLinkedIn;
   } else if (site.includes('indeed.com') || site.includes('indeed.fr')) {
-    return require('@/lib/parsers/indeed').parseIndeed;
+    return parseIndeed;
   } else if (site.includes('monster.com') || site.includes('monster.fr')) {
-    return require('@/lib/parsers/monster').parseMonster;
+    return parseMonster;
   } else if (site.includes('welcometothejungle.com')) {
-    return require('@/lib/parsers/wttj').parseWTTJ;
+    return parseWTTJ;
   } else if (site.includes('glassdoor.com') || site.includes('glassdoor.fr')) {
-    return require('@/lib/parsers/glassdoor').parseGlassdoor;
+    return parseGlassdoor;
   }
   
   // Return null if no specific parser is available

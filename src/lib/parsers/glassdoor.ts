@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { ParserResult, extractText, extractJsonLd, stringToArray, detectLanguage } from './baseParser';
+import { ParserResult, extractText, extractJsonLd, detectLanguage } from './baseParser';
 
 export function parseGlassdoor(html: string, url: string): ParserResult {
   const $ = cheerio.load(html);
@@ -78,22 +78,21 @@ export function parseGlassdoor(html: string, url: string): ParserResult {
       const headingText = $(heading).text().toLowerCase();
       
       // Get the content following this heading
-      let contentNode = heading;
-      let content = '';
+      let currentElement = heading;
       const items: string[] = [];
       
       // Collect text until we hit another heading or run out of siblings
-      while (contentNode.next && !$(contentNode.next).is('strong, b, .strong')) {
-        contentNode = contentNode.next;
+      while ($(currentElement).next().length && !$(currentElement).next().is('strong, b, .strong')) {
+        currentElement = $(currentElement).next()[0];
         
         // If it's a list, get the items
-        if ($(contentNode).is('ul, ol')) {
-          const listItems = $(contentNode).find('li').map((_, li) => $(li).text().trim()).get();
+        if ($(currentElement).is('ul, ol')) {
+          const listItems = $(currentElement).find('li').map((_, li) => $(li).text().trim()).get();
           items.push(...listItems);
         } 
         // If it's a paragraph, add it as text
-        else if ($(contentNode).is('p') && $(contentNode).text().trim()) {
-          const text = $(contentNode).text().trim();
+        else if ($(currentElement).is('p') && $(currentElement).text().trim()) {
+          const text = $(currentElement).text().trim();
           
           // If it contains bullet points or numbered items, split it
           if (/•|\*|^\d+\./.test(text)) {

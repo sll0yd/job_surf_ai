@@ -81,9 +81,9 @@ function prepareHtmlContent(html: string): {
     }
     
     // Look for structured sections
-    let requirements = extractSection($, 'requirements', 'qualifications', 'skills', 'profile');
-    let responsibilities = extractSection($, 'responsibilities', 'duties', 'role', 'mission');
-    let benefits = extractSection($, 'benefits', 'perks', 'offer', 'advantages');
+    const requirements = extractSection($, 'requirements', 'qualifications', 'skills', 'profile');
+    const responsibilities = extractSection($, 'responsibilities', 'duties', 'role', 'mission');
+    const benefits = extractSection($, 'benefits', 'perks', 'offer', 'advantages');
     
     if (requirements) metadata['requirements'] = requirements;
     if (responsibilities) metadata['responsibilities'] = responsibilities;
@@ -133,19 +133,20 @@ function extractSection($: cheerio.CheerioAPI, ...sectionNames: string[]): strin
     if (pattern.test(text)) {
       // Found a matching section heading
       let section = '';
-      let node = el;
+      let currentElement = el;
       
       // Get the content until the next heading
-      while (node.next && !$(node.next).is('h1, h2, h3, h4, h5, h6, strong, b, .section-title')) {
-        node = node.next;
+      while ($(currentElement).next().length && 
+            !$(currentElement).next().is('h1, h2, h3, h4, h5, h6, strong, b, .section-title')) {
+        currentElement = $(currentElement).next()[0];
         
         // If it's a list, get the items
-        if ($(node).is('ul, ol')) {
-          section += $(node).text().trim() + '\n';
+        if ($(currentElement).is('ul, ol')) {
+          section += $(currentElement).text().trim() + '\n';
         } 
         // If it's a paragraph, add its text
-        else if ($(node).is('p, div') && $(node).text().trim()) {
-          section += $(node).text().trim() + '\n';
+        else if ($(currentElement).is('p, div') && $(currentElement).text().trim()) {
+          section += $(currentElement).text().trim() + '\n';
         }
       }
       

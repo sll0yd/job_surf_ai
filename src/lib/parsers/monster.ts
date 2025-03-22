@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { ParserResult, extractText, extractJsonLd, stringToArray, detectLanguage } from './baseParser';
+import { ParserResult, extractText, extractJsonLd, detectLanguage } from './baseParser';
 
 export function parseMonster(html: string, url: string): ParserResult {
   const $ = cheerio.load(html);

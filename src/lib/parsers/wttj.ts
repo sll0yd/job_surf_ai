@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { ParserResult, extractText, extractJsonLd, stringToArray, detectLanguage } from './baseParser';
+import { ParserResult, extractText, extractJsonLd, detectLanguage } from './baseParser';
 
 export function parseWTTJ(html: string, url: string): ParserResult {
   const $ = cheerio.load(html);
@@ -53,14 +53,13 @@ export function parseWTTJ(html: string, url: string): ParserResult {
     const headingText = $(heading).text().toLowerCase();
     
     // Get the content following this heading until the next heading
-    let content = '';
-    let currentNode = heading;
     const contentElements = [];
+    let currentElem = heading;
     
-    while (currentNode.next && !$(currentNode.next).is('h2, h3')) {
-      currentNode = currentNode.next;
-      if ($(currentNode).is('p, ul, ol') && $(currentNode).text().trim()) {
-        contentElements.push(currentNode);
+    while ($(currentElem).next().length && !$(currentElem).next().is('h2, h3')) {
+      currentElem = $(currentElem).next()[0];
+      if ($(currentElem).is('p, ul, ol') && $(currentElem).text().trim()) {
+        contentElements.push(currentElem);
       }
     }
     
