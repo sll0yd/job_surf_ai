@@ -8,6 +8,7 @@ import { parseIndeed } from '@/lib/parsers/indeed';
 import { parseMonster } from '@/lib/parsers/monster';
 import { parseWTTJ } from '@/lib/parsers/wttj';
 import { parseGlassdoor } from '@/lib/parsers/glassdoor';
+import { getRandomizedHeaders, isBlockedSite, randomDelay, sanitizeJobUrl, handleBlockedSite } from '@/lib/proxy-utils';
 
 // Simple in-memory request tracking for rate limiting
 const requestTracker = {
@@ -71,9 +72,8 @@ export async function POST(request: NextRequest) {
     // Validate and normalize URL
     let url: string;
     try {
-      // Parse it to ensure it's valid and get a normalized version
-      const parsedUrl = new URL(rawUrl);
-      url = parsedUrl.toString();
+      // Parse and sanitize URL to remove tracking parameters
+      url = sanitizeJobUrl(rawUrl);
     } catch {
       return NextResponse.json<ExtractResponse>(
         { 
@@ -106,19 +106,42 @@ export async function POST(request: NextRequest) {
     const hostname = new URL(url).hostname;
     const specificParser = getParserForSite(hostname);
     
+    // Check if the site is known to block scrapers
+    const siteIsBlocked = isBlockedSite(url);
+    
+    // Get randomized headers based on the site
+    const headers = getRandomizedHeaders(hostname);
+    
     // Fetch the HTML content from the URL with enhanced headers
     try {
       console.log(`Fetching URL: ${url}`);
+      
+      // If the site is known to block scrapers, provide a specific message
+      if (siteIsBlocked) {
+        console.log(`Detected blocked job site (${hostname}) - suggesting text-based extraction`);
+        
+        // Extract basic information from the URL for blocked sites
+        const blockedSiteData = handleBlockedSite(url);
+        
+        // Cache the basic info
+        jobCache.set(url, blockedSiteData);
+        
+        return NextResponse.json<ExtractResponse>(
+          { 
+            success: false, 
+            error: `${hostname} blocks automated access. Please copy the job content and use the 'Extract by Text' option instead.`,
+            data: blockedSiteData
+          },
+          { status: 403 }
+        );
+      }
+      
+      // Add a small random delay to make requests look more human-like
+      await randomDelay();
+      
+      // For other sites, proceed with normal scraping
       const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1',
-          'Cache-Control': 'max-age=0',
-        },
+        headers,
         timeout: 30000, // Increased timeout
         maxRedirects: 5,
         validateStatus: function (status) {
@@ -213,7 +236,7 @@ export async function POST(request: NextRequest) {
         errorMessage = `Failed to fetch the webpage (Status: ${statusCode})`;
         
         if (statusCode === 403) {
-          errorMessage = "Access forbidden. This website may be blocking web scraping attempts. Try a different URL or use a website that allows public access.";
+          errorMessage = "Access forbidden. This website may be blocking web scraping attempts. Try using the 'Extract by Text' option instead.";
         } else if (statusCode === 404) {
           errorMessage = "The requested page was not found. Please check the URL and try again.";
         } else if (statusCode === 429) {
@@ -225,6 +248,37 @@ export async function POST(request: NextRequest) {
       } else {
         // Something happened in setting up the request that triggered an Error
         errorMessage = axiosError.message || 'Unknown error occurred';
+      }
+      
+      // For any site returning 403, we should give specific guidance
+      if (statusCode === 403 || siteIsBlocked) {
+        errorMessage = "This website blocks automated access. Please copy the job description and use the 'Extract by Text' option instead.";
+        
+        // Add this site to our cache to speed up future responses
+        jobCache.set(url, {
+          title: "Access Blocked",
+          company: hostname.split('.')[0].charAt(0).toUpperCase() + hostname.split('.')[0].slice(1),
+          description: "This website blocks automated access. To extract job information, please copy the job description text and use the 'Extract by Text' feature instead.",
+          url: url,
+          language: url.includes('.fr') ? 'fr' : 'en',
+          location: "Unable to extract - Access blocked"
+        });
+        
+        return NextResponse.json<ExtractResponse>(
+          { 
+            success: false, 
+            error: errorMessage,
+            data: {
+              title: "Access Blocked",
+              company: hostname.split('.')[0].charAt(0).toUpperCase() + hostname.split('.')[0].slice(1),
+              description: "This website blocks automated access. To extract job information, please copy the job description text and use the 'Extract by Text' feature instead.",
+              url: url,
+              language: url.includes('.fr') ? 'fr' : 'en',
+              location: "Unable to extract - Access blocked"
+            }
+          },
+          { status: 403 }
+        );
       }
       
       return NextResponse.json<ExtractResponse>(
