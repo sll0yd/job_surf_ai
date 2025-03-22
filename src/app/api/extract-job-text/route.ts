@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { ExtractResponse } from '@/lib/types';
+import { jobCache } from '@/lib/cache';
+import crypto from 'crypto';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -21,6 +23,13 @@ function prepareTextContent(text: string): string {
   return content;
 }
 
+// Function to create a cache key for text content
+function createCacheKey(text: string): string {
+  // Create a hash of the text to use as a cache key
+  const hash = crypto.createHash('md5').update(text).digest('hex');
+  return `text-${hash}`;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Parse the request body
@@ -34,9 +43,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Generate a cache key for this text
+    const cacheKey = createCacheKey(text);
+    
+    // Check if we have a cached result
+    const cachedData = jobCache.get(cacheKey);
+    if (cachedData) {
+      console.log('Cache hit for text input');
+      return NextResponse.json<ExtractResponse>(
+        { success: true, data: cachedData },
+        { status: 200 }
+      );
+    }
+
     // Extract job information using OpenAI
     try {
       const jobData = await extractJobInformationFromText(text);
+      
+      // Cache the result
+      jobCache.set(cacheKey, jobData);
       
       return NextResponse.json<ExtractResponse>(
         { success: true, data: jobData },
@@ -94,6 +119,9 @@ async function extractJobInformationFromText(jobText: string) {
   console.log(`Processed text content length: ${processedContent.length} characters`);
   
   try {
+    // Try to detect language first for better prompt customization
+    const languageHint = detectLanguage(processedContent);
+    
     const response = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo', // Using gpt-3.5-turbo for better rate limits
       messages: [
@@ -101,22 +129,25 @@ async function extractJobInformationFromText(jobText: string) {
           role: 'system',
           content: `You are a specialized AI that extracts job information from text content. 
           Analyze the provided job listing text and extract all relevant details.
+          The text appears to be in ${languageHint === 'fr' ? 'French' : 'English'}.
+          
           Return the data in a clean, structured JSON format with the following fields where available:
           - title: job title
           - company: company name
           - location: job location
-          - description: main job description
-          - requirements: array of job requirements
-          - responsibilities: array of job responsibilities
-          - benefits: array of job benefits
+          - description: main job description (summarized if needed)
+          - requirements: array of job requirements (extract as individual items)
+          - responsibilities: array of job responsibilities (extract as individual items)
+          - benefits: array of job benefits (extract as individual items)
           - salary: salary information if available
           - jobType: full-time, part-time, contract, etc.
           - postedDate: when the job was posted
           - applicationDeadline: application deadline if available
           - contactInfo: contact information if available
-          - language: determine if the job posting is in English ('en') or French ('fr')
+          - language: "${languageHint}" (already determined)
           
-          If certain fields are not present, omit them. Do not invent information.`
+          If certain fields are not present, omit them. Do not invent information.
+          For arrays, extract actual items from the text, don't create general statements.`
         },
         {
           role: 'user',
@@ -140,7 +171,7 @@ async function extractJobInformationFromText(jobText: string) {
         title: parsedData.title || "Unknown Title",
         company: parsedData.company || "Unknown Company",
         description: parsedData.description || "No description available",
-        language: parsedData.language || "en",
+        language: parsedData.language || languageHint || "en",
         url: "N/A - Direct text input",
         location: parsedData.location || "Unknown Location",
         ...parsedData // Include any other fields that were successfully extracted
@@ -154,7 +185,7 @@ async function extractJobInformationFromText(jobText: string) {
         title: "Could not extract job title",
         company: "Unknown company",
         description: "Could not parse job description properly.",
-        language: "en",
+        language: languageHint || "en",
         url: "N/A - Direct text input",
         location: "Unknown Location",
         error: "Failed to parse the full job details."
@@ -164,4 +195,22 @@ async function extractJobInformationFromText(jobText: string) {
     console.error('Error extracting job information with OpenAI:', error);
     throw error;
   }
+}
+
+// Simple function to detect language from text content
+function detectLanguage(text: string): 'en' | 'fr' {
+  // Count French-specific words
+  const frenchWords = ['emploi', 'poste', 'entreprise', 'travail', 'société', 'salaire', 
+                      'expérience', 'compétences', 'responsabilités', 'missions'];
+  
+  // Convert to lowercase for case-insensitive matching
+  const lowerText = text.toLowerCase();
+  
+  // Count occurrences of French words
+  const frenchCount = frenchWords.reduce((count, word) => {
+    return count + (lowerText.match(new RegExp(word, 'g')) || []).length;
+  }, 0);
+  
+  // If we detect multiple French words, assume it's French
+  return frenchCount > 2 ? 'fr' : 'en';
 }
